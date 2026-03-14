@@ -37,6 +37,22 @@ export interface TokenResponse {
   user: User;
 }
 
+export interface PaginationMeta {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  meta: PaginationMeta;
+}
+
+export type SortOrder = 'asc' | 'desc';
+
 // File API
 export interface UserInfo {
   id: number;
@@ -45,7 +61,7 @@ export interface UserInfo {
 }
 
 export interface VideoFile {
-  id: number;
+  id: string;
   filename: string;
   filepath: string;
   user_id?: number;
@@ -153,8 +169,20 @@ export class ApiClient {
     return result;
   }
 
-  async getUsers(): Promise<User[]> {
-    const response = await fetch(`${this.baseUrl}/users`, {
+  async getUsers(params: { page?: number; pageSize?: number; sortOrder?: SortOrder } = {}): Promise<PaginatedResponse<User>> {
+    const searchParams = new URLSearchParams();
+    if (params.page) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params.pageSize) {
+      searchParams.set('page_size', String(params.pageSize));
+    }
+    if (params.sortOrder) {
+      searchParams.set('sort_order', params.sortOrder);
+    }
+
+    const query = searchParams.toString();
+    const response = await fetch(`${this.baseUrl}/users${query ? `?${query}` : ''}`, {
       headers: this.getHeaders(),
     });
     if (!response.ok) throw new Error('Failed to fetch users');
@@ -191,11 +219,11 @@ export class ApiClient {
   }
 
   // File Management
-  async uploadFile(file: File, userId?: number): Promise<VideoFile> {
+  async uploadFile(file: File, videoId: string): Promise<VideoFile> {
     const formData = new FormData();
     formData.append('file', file);
-    if (userId) {
-      formData.append('user_id', userId.toString());
+    if (videoId) {
+      formData.append('video_id', videoId);
     }
 
     const headers: HeadersInit = {};
@@ -215,15 +243,27 @@ export class ApiClient {
     return response.json();
   }
 
-  async getFiles(): Promise<VideoFile[]> {
-    const response = await fetch(`${this.baseUrl}/files`, {
+  async getFiles(params: { page?: number; pageSize?: number; sortOrder?: SortOrder } = {}): Promise<PaginatedResponse<VideoFile>> {
+    const searchParams = new URLSearchParams();
+    if (params.page) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params.pageSize) {
+      searchParams.set('page_size', String(params.pageSize));
+    }
+    if (params.sortOrder) {
+      searchParams.set('sort_order', params.sortOrder);
+    }
+
+    const query = searchParams.toString();
+    const response = await fetch(`${this.baseUrl}/files${query ? `?${query}` : ''}`, {
       headers: this.getHeaders(),
     });
     if (!response.ok) throw new Error('Failed to fetch files');
     return response.json();
   }
 
-  async getFile(id: number): Promise<VideoFile> {
+  async getFile(id: string): Promise<VideoFile> {
     const response = await fetch(`${this.baseUrl}/files/${id}`, {
       headers: this.getHeaders(),
     });
@@ -239,7 +279,7 @@ export class ApiClient {
     return response.json();
   }
 
-  async updateFile(id: number, data: VideoFileUpdate): Promise<VideoFile> {
+  async updateFile(id: string, data: VideoFileUpdate): Promise<VideoFile> {
     const response = await fetch(`${this.baseUrl}/files/${id}`, {
       method: 'PUT',
       headers: this.getHeaders(),
@@ -249,7 +289,7 @@ export class ApiClient {
     return response.json();
   }
 
-  async deleteFile(id: number): Promise<void> {
+  async deleteFile(id: string): Promise<void> {
     const response = await fetch(`${this.baseUrl}/files/${id}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
@@ -257,7 +297,7 @@ export class ApiClient {
     if (!response.ok) throw new Error('Failed to delete file');
   }
 
-  async detectFile(id: number): Promise<DetectionResponse> {
+  async detectFile(id: string): Promise<DetectionResponse> {
     const response = await fetch(`${this.baseUrl}/files/${id}/detect`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -265,6 +305,28 @@ export class ApiClient {
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.detail || 'Failed to run detection');
+    }
+    return response.json();
+  }
+
+  async detectImage(file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const headers: HeadersInit = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+    // Không set Content-Type với FormData - để browser tự set
+
+    const response = await fetch(`${this.baseUrl}/files/detect-image`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to detect image');
     }
     return response.json();
   }

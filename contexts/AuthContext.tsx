@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { apiClient, User } from '@/lib/api';
+import { apiClient, User } from '@/app/api';
 
 interface AuthContextType {
   user: User | null;
@@ -19,7 +19,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check for existing token on mount
   useEffect(() => {
     const savedToken = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     if (savedToken) {
@@ -70,4 +69,8 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+}
+
+export const setLocalStorage = () =>{
+
 }

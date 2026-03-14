@@ -123,3 +123,6 @@
     @apply bg-background text-foreground;
   }
 }
+#devtools-indicator {
+  display: none !important;
+}
