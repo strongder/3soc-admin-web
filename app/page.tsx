@@ -82,7 +82,6 @@ export default function Home() {
         setBboxImageUrl(null);
         try {
             const result = await apiClient.detectImage(file);
-            console.log('[detectImage] API result:', result);
             if (result.detections && result.detections.length > 0) {
                 setSingleDetection(0, result.detections);
                 // Vẽ bounding boxes lên ảnh
@@ -169,7 +168,6 @@ export default function Home() {
 
     const currentBoxes = useMemo(() => {
         const renderTimestamp = currentTimestamp;
-        console.log(`[useMemo] Finding closest detection for timestamp: ${renderTimestamp}ms`);
         const timestamps = Array.from(detectionResults.keys());
         if (timestamps.length === 0) return [];
 
