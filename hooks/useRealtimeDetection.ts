@@ -33,7 +33,8 @@ export function useRealtimeDetection({
   }, []);
 
   useEffect(() => {
-    const client = new WebSocketClient('ws://localhost:8000/realtime');
+    const wsUrl = (process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000') + '/realtime';
+    const client = new WebSocketClient(wsUrl);
     const unsubscribe = client.on('detection', (data: any) => {
       const { timestamp, boxes } = data;
       appendDetectionResult(timestamp, boxes);

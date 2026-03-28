@@ -19,6 +19,8 @@ import {
 } from '@/components/ui/pagination';
 
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+
 export default function FilesPage() {
     const {toast} = useToast();
     const [files, setFiles] = useState<VideoFile[]>([]);
@@ -72,7 +74,7 @@ export default function FilesPage() {
             setDetectionResult(null);
 
             const eventSource = new EventSource(
-                `http://localhost:8000/api/files/${fileId}/detect-stream`
+                `${API_BASE_URL}/files/${fileId}/detect-stream`
             );
 
             let violations: any[] = [];

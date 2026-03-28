@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import './topbar.css';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '');
 
 export function TopBar() {
   const pathname = usePathname();
