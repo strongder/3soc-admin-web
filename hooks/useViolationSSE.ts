@@ -9,7 +9,9 @@ export type ViolationFrame = {
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
-const BACKEND_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, '');
+const DETECT_SAMPLE_MS = 100;
+const SAVE_COOLDOWN_MS = 200;
+const SAVE_IMAGE_MS = 2000;
 
 export function useViolationSSE({
   videoId,
@@ -22,6 +24,7 @@ export function useViolationSSE({
 }) {
   const sseRef = useRef<EventSource | null>(null);
   const onViolationRef = useRef<typeof onViolation>(onViolation);
+  const seenKeysRef = useRef<Set<string>>(new Set());
   const [violationFrames, setViolationFrames] = useState<ViolationFrame[]>([]);
 
   useEffect(() => {
@@ -29,16 +32,17 @@ export function useViolationSSE({
   }, [onViolation]);
 
   const appendViolation = useCallback((violation: ViolationFrame) => {
+    const key = `${violation.frame_number}-${violation.timestamp}`;
+    if (seenKeysRef.current.has(key)) return;
+    seenKeysRef.current.add(key);
+
     setViolationFrames((prev) => {
-      const exists = prev.some(
-        (item) => item.frame_number === violation.frame_number && item.timestamp === violation.timestamp
-      );
-      if (exists) return prev;
-      return [...prev, violation].sort((a, b) => a.timestamp - b.timestamp);
+      return [...prev, violation];
     });
   }, []);
 
   const resetViolations = useCallback(() => {
+    seenKeysRef.current.clear();
     setViolationFrames([]);
   }, []);
 
@@ -50,17 +54,32 @@ export function useViolationSSE({
       sseRef.current = null;
     }
 
-    const es = new EventSource(`${BACKEND_BASE_URL}/file-stream/${videoId}`);
+    const es = new EventSource(
+      `${API_BASE_URL}/files/${videoId}/detect-stream?sample_ms=${DETECT_SAMPLE_MS}&cooldown_ms=${SAVE_COOLDOWN_MS}&save_image_ms=${SAVE_IMAGE_MS}`
+    );
     sseRef.current = es;
 
     es.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        if (payload.type !== 'violation' || !payload.data) return;
+        if (!payload?.type || !payload?.data) return;
 
-        const violation = payload.data as ViolationFrame;
-        appendViolation(violation);
-        onViolationRef.current?.(violation);
+        if (payload.type === 'detection') {
+          const detection = {
+            frame_number: payload.data.frame_number ?? 0,
+            timestamp: payload.data.timestamp,
+            image_path: '',
+            detections: payload.data.detections || [],
+          } as ViolationFrame;
+          onViolationRef.current?.(detection);
+          return;
+        }
+
+        if (payload.type === 'violation') {
+          const violation = payload.data as ViolationFrame;
+          appendViolation(violation);
+          onViolationRef.current?.(violation);
+        }
       } catch (error) {
         console.error('[SSE] Invalid payload:', error);
       }

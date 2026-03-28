@@ -3,11 +3,10 @@ import React, {useState, useEffect, useCallback, useRef, useMemo} from 'react';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
 import {CanvasOverlay} from '@/components/CanvasOverlay';
-import {type BoundingBox} from '@/lib/WebSocketClient';
 import {apiClient} from '@/app/api';
 import {drawBoundingBoxes} from '@/lib/imageUtils';
 import {Activity, Play, Pause, Upload, Scan, Image as ImageIcon, Video as VideoIcon} from 'lucide-react';
-import {useRealtimeDetection} from '@/hooks/useRealtimeDetection';
+import {BoundingBox, useRealtimeDetection} from '@/hooks/useRealtimeDetection';
 import {useViolationSSE} from '@/hooks/useViolationSSE';
 
 type ViolationFrame = {
@@ -19,6 +18,8 @@ type ViolationFrame = {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 const BACKEND_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, '');
+const TIMESTAMP_UPDATE_INTERVAL_MS = 50;
+const BOX_STALE_MS = 500;
 
 export default function Home() {
     // --- STATE QUẢN LÝ ---
@@ -36,6 +37,7 @@ export default function Home() {
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTimestamp, setCurrentTimestamp] = useState(0);
     const [videoDuration, setVideoDuration] = useState(0);
+    const lastTimestampUpdateRef = useRef(0);
 
     const {
         detectionResults,
@@ -57,7 +59,7 @@ export default function Home() {
 
     const {violationFrames, resetViolations} = useViolationSSE({
         videoId,
-        enabled: mediaType === 'video' && !!videoId,
+        enabled: mediaType === 'video' && !!videoId && isDetecting,
         onViolation: handleViolation,
     });
 
@@ -151,7 +153,11 @@ export default function Home() {
         let frameId: number;
         const sync = () => {
             if (videoRef.current && !videoRef.current.paused) {
-                setCurrentTimestamp(videoRef.current.currentTime * 1000);
+                const nowTs = videoRef.current.currentTime * 1000;
+                if (Math.abs(nowTs - lastTimestampUpdateRef.current) >= TIMESTAMP_UPDATE_INTERVAL_MS) {
+                    lastTimestampUpdateRef.current = nowTs;
+                    setCurrentTimestamp(nowTs);
+                }
                 frameId = requestAnimationFrame(sync);
             }
         };
@@ -166,17 +172,26 @@ export default function Home() {
             .map(([ts, boxes]) => ({ts, count: boxes.length}));
     }, [detectionResults]);
 
+    const sortedDetectionTimestamps = useMemo(
+        () => Array.from(detectionResults.keys()).sort((a, b) => a - b),
+        [detectionResults]
+    );
+
     const currentBoxes = useMemo(() => {
-        const renderTimestamp = currentTimestamp;
-        const timestamps = Array.from(detectionResults.keys());
+        const timestamps = sortedDetectionTimestamps;
         if (timestamps.length === 0) return [];
 
-        const closest = timestamps.reduce((prev, curr) => {
-            return Math.abs(curr - renderTimestamp) < Math.abs(prev - renderTimestamp) ? curr : prev;
-        });
+        // Tìm detection timestamp lớn nhất mà <= currentTimestamp
+        for (let i = timestamps.length - 1; i >= 0; i--) {
+            const ts = timestamps[i];
+            if (ts > currentTimestamp) continue;
+            if (currentTimestamp - ts > BOX_STALE_MS) break;
+            const boxes = detectionResults.get(ts) || [];
+            if (boxes.length > 0) return boxes;
+        }
 
-        return detectionResults.get(closest) || [];
-    }, [currentTimestamp, detectionResults]);
+        return [];
+    }, [currentTimestamp, detectionResults, sortedDetectionTimestamps]);
 
     return (
         <div className="min-h-screen bg-slate-50 p-6">
@@ -263,8 +278,6 @@ export default function Home() {
                                             <CanvasOverlay
                                                 videoElement={videoRef.current}
                                                 boxes={currentBoxes}
-                                                currentTimestamp={currentTimestamp}
-                                                detectionTimestamps={detectionResults}
                                             />
                                         )}
                                     </>

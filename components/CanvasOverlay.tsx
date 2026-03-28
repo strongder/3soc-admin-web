@@ -6,15 +6,11 @@ import type {BoundingBox} from '@/lib/WebSocketClient';
 interface CanvasOverlayProps {
     videoElement: HTMLVideoElement | null;
     boxes: BoundingBox[];
-    currentTimestamp: number;
-    detectionTimestamps: Map<number, BoundingBox[]>;
 }
 
 export const CanvasOverlay = React.memo(function CanvasOverlay({
                                                                    videoElement,
-                                                                   boxes,
-                                                                   currentTimestamp,
-                                                                   detectionTimestamps
+                                                                   boxes
                                                                }: CanvasOverlayProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationFrameRef = useRef<number>(0);
@@ -111,7 +107,7 @@ export const CanvasOverlay = React.memo(function CanvasOverlay({
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
-    }, [videoElement, boxes, drawBoxes, currentTimestamp, detectionTimestamps]);
+    }, [videoElement, boxes, drawBoxes]);
 
     // Handle canvas resizing to match video
     useEffect(() => {
