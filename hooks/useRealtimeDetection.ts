@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import WebSocketClient, { type BoundingBox } from '@/lib/WebSocketClient';
 
-const DETECT_INTERVAL_MS = 200;
-const FRAME_JPEG_QUALITY = 0.6;
+const DETECT_INTERVAL_MS = 120;
+const FRAME_JPEG_QUALITY = 1;
+const MAX_RESULT_ENTRIES = 300;
 
 export function useRealtimeDetection({
   videoRef,
@@ -14,12 +15,31 @@ export function useRealtimeDetection({
   enabled: boolean;
 }) {
   const wsClientRef = useRef<WebSocketClient | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [detectionResults, setDetectionResults] = useState<Map<number, BoundingBox[]>>(new Map());
 
   const appendDetectionResult = useCallback((timestamp: number, boxes: BoundingBox[]) => {
+    if (!Number.isFinite(timestamp)) return;
+
     setDetectionResults((prev) => {
       const next = new Map(prev);
-      next.set(timestamp, boxes || []);
+      const incomingBoxes = boxes || [];
+      const existingBoxes = next.get(timestamp) || [];
+
+      // If backend returns empty boxes for the same frame, keep the last non-empty result.
+      if (incomingBoxes.length === 0 && existingBoxes.length > 0) {
+        return prev;
+      }
+
+      next.set(timestamp, incomingBoxes);
+
+      if (next.size > MAX_RESULT_ENTRIES) {
+        const oldestTimestamp = next.keys().next().value as number | undefined;
+        if (oldestTimestamp !== undefined) {
+          next.delete(oldestTimestamp);
+        }
+      }
+
       return next;
     });
   }, []);
@@ -55,7 +75,8 @@ export function useRealtimeDetection({
     if (!video || !wsClient?.isConnected() || !videoId) return;
     if (video.readyState < 2) return;
 
-    const canvas = document.createElement('canvas');
+    const canvas = canvasRef.current || document.createElement('canvas');
+    canvasRef.current = canvas;
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
